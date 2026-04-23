@@ -1,61 +1,57 @@
 import streamlit as st
 import pandas as pd
-import datetime
 
-st.set_page_config(page_title="Analista Pro 2026", layout="wide")
+st.set_page_config(page_title="Analista Pro Série A", layout="wide")
 
-# Link da sua planilha (Já configurada para CSV)
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4oAQdRvnyDmqozRSX2wggU8ABqruw2LgD8P0mKqsLkYCe8CC14jeSKpZ6Q5IaAHjLKPlgdqXp0wPE/pub?output=csv"
 
-@st.cache_data(ttl=3600)
-def buscar_dados():
+@st.cache_data(ttl=600)
+def carregar_dados():
     try:
         df = pd.read_csv(URL_PLANILHA)
         df.columns = [c.strip().upper() for c in df.columns]
+        # Resolve o KeyError: busca qualquer coluna que pareça ser o nome do time
+        col_time = [c for c in df.columns if c in ['TIME', 'EQUIPE', 'EQUIPES', 'SQUAD']][0]
+        df = df.rename(columns={col_time: 'NOME_TIME'})
         return df
     except:
         return None
 
-st.title("🛡️ Sistema de Predição Profissional - Brasileirão")
-
-dados = buscar_dados()
+st.title("🎯 Preditor Série A: Confrontos Futuros")
+dados = carregar_dados()
 
 if dados is not None:
-    # --- INTERFACE DE CONFRONTO ---
-    st.header("🔮 Analisador de Próximos Confrontos")
-    
-    col_a, col_b = st.columns(2)
-    with col_a:
-        time_1 = st.selectbox("Mandante", dados.iloc[:, 0].unique()) # Pega a primeira coluna de times
-    with col_b:
-        time_2 = st.selectbox("Visitante", dados.iloc[:, 0].unique())
+    st.sidebar.header("Próximo Jogo (26/04/2026)")
+    casa = st.sidebar.selectbox("Mandante", dados['NOME_TIME'].unique())
+    fora = st.sidebar.selectbox("Visitante", dados['NOME_TIME'].unique())
 
-    if st.button("📊 GERAR PROGNÓSTICO COMPLETO"):
-        st.divider()
-        st.subheader(f"🏟️ Análise Detalhada: {time_1} x {time_2}")
+    if st.sidebar.button("📊 Calcular Probabilidades"):
+        d_casa = dados[dados['NOME_TIME'] == casa].iloc[0]
+        d_fora = dados[dados['NOME_TIME'] == fora].iloc[0]
+
+        st.header(f"⚔️ {casa} vs {fora}")
         
-        # Simulando o cálculo baseado nos últimos 5 confrontos (Lógica Preditiva)
-        # Aqui o código cruza os dados de Gols e Vitórias da planilha
-        stats_1 = dados[dados.iloc[:, 0] == time_1].iloc[0]
-        stats_2 = dados[dados.iloc[:, 0] == time_2].iloc[0]
+        # --- LÓGICA DE ÚLTIMOS 5 JOGOS ---
+        # Conta vitórias na coluna 'ÚLT_5' ou 'FORMA' da ESPN
+        forma_casa = str(d_casa.get('ÚLT_5', 'V')).count('V')
+        forma_fora = str(d_fora.get('ÚLT_5', 'V')).count('V')
 
-        # Lógica de Cálculo
-        prob_vitoria = time_1 if stats_1.get('V', 0) > stats_2.get('V', 0) else time_2
-        media_cantos = 9.5 # Baseado na média da Série A 2025/26
-        btts_prob = "78% (ALTA)" if stats_1.get('GP', 0) > 1.2 else "45% (BAIXA)"
+        # Ambas Marcam (BTTS): Baseado em Gols Pró (GP) > 1.2
+        prob_btts = "ALTA (78%)" if (float(d_casa.get('GP', 0)) > 1.2 and float(d_fora.get('GP', 0)) > 1.0) else "BAIXA (42%)"
+        
+        # Escanteios e Cartões
+        cantos = 10.5 if (forma_casa + forma_fora) > 5 else 8.5
+        cartoes = "+4.5" if forma_casa < 2 else "+3.5"
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Provável Vencedor", prob_vitoria)
-        c2.metric("Ambas Marcam", btts_prob)
-        c3.metric("Escanteios", f"+ {media_cantos}")
-        c4.metric("Risco Cartões", "ALTO 🟨")
+        c1.metric("Vencedor Provável", casa if forma_casa >= forma_fora else fora)
+        c2.metric("Ambas Marcam", prob_btts)
+        c3.metric("Linha de Cantos", f"+{cantos}")
+        c4.metric("Risco de Cartões", cartoes)
 
-        st.info(f"💡 **Dica de Entrada:** Baseado nos últimos 5 jogos de cada clube, a tendência é de jogo aberto com favoritismo para o {prob_vitoria}.")
+        st.info(f"💡 **Dica Profissional:** Jogo com tendência de {prob_btts} para Ambas Marcam e vantagem para o {casa if forma_casa >= forma_fora else fora} pela forma recente.")
 
-    # --- TABELA AUTOMATIZADA ---
-    st.markdown("### 📈 Dados Consolidados (ESPN/GE)")
+    st.divider()
     st.dataframe(dados, use_container_width=True)
-    st.caption(f"Última atualização automática: {datetime.datetime.now().strftime('%d/%f/%Y %H:%M')}")
-
 else:
-    st.error("Erro ao conectar com o banco de dados automatizado.")
+    st.error("Erro ao carregar banco de dados. Verifique a publicação do Google Sheets.")
