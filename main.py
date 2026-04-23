@@ -1,72 +1,54 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 
-st.set_page_config(page_title="Preditor Pro 2026", layout="wide")
+st.set_page_config(page_title="Analista de Confrontos", layout="wide")
 
-# Link da sua planilha CSV
 URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4oAQdRvnyDmqozRSX2wggU8ABqruw2LgD8P0mKqsLkYCe8CC14jeSKpZ6Q5IaAHjLKPlgdqXp0wPE/pub?output=csv"
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def carregar_dados():
     try:
         df = pd.read_csv(URL_PLANILHA)
-        df.columns = [c.strip() for c in df.columns]
+        # Padroniza nomes de colunas (remove espaços e deixa em maiúsculo)
+        df.columns = [c.strip().upper() for c in df.columns]
+        
+        # Tenta encontrar a coluna de times independente do nome
+        possiveis_nomes = ['TIME', 'EQUIPE', 'SQUAD', 'TEAM']
+        for nome in possiveis_nomes:
+            if nome in df.columns:
+                df = df.rename(columns={nome: 'NOME_TIME'})
+                break
         return df
-    except Exception as e:
+    except:
         return None
 
-def calcular_probabilidades(casa, fora, df):
-    dados_casa = df[df['Time'] == casa].iloc[0]
-    dados_fora = df[df['Time'] == fora].iloc[0]
-    
-    # Lógica de Predição (Baseada em médias e peso de 5 jogos)
-    prob_vitoria = "Empate/Equilibrado"
-    if (dados_casa['Vitórias'] > dados_fora['Vitórias'] + 3):
-        prob_vitoria = casa
-    elif (dados_fora['Vitórias'] > dados_casa['Vitórias'] + 3):
-        prob_vitoria = fora
-        
-    # Ambas Marcam (BTTS)
-    btts_casa = float(str(dados_casa['Ambas Marcam (BTTS)']).replace('%',''))
-    btts_fora = float(str(dados_fora['Ambas Marcam (BTTS)']).replace('%',''))
-    btts_final = "Sim" if (btts_casa + btts_fora) / 2 > 55 else "Não"
-    
-    return {
-        "vencedor": prob_vitoria,
-        "btts": btts_final,
-        "escanteios": round((dados_casa['Escanteios (Média)'] + dados_fora['Escanteios (Média)']), 1),
-        "cartoes": round((dados_casa['Cartões (Média)'] + dados_fora['Cartões (Média)']) / 2, 1)
-    }
-
-st.title("🤖 Analista Preditivo: Brasileirão 2026")
+st.title("⚽ Simulador de Confrontos 2025/2026")
 dados = carregar_dados()
 
-if dados is not None:
-    # --- Seção de Confronto Futuro ---
-    st.header("🔮 Simulador de Próximos Confrontos")
-    col_c, col_f = st.columns(2)
-    
-    with col_c:
-        time_casa = st.selectbox("Mandante", dados['Time'].unique(), index=0)
-    with col_f:
-        time_fora = st.selectbox("Visitante", dados['Time'].unique(), index=1)
-    
-    if st.button("🔥 Gerar Aposta Sugerida"):
-        res = calcular_probabilidades(time_casa, time_fora, dados)
-        
-        st.success(f"**Análise Concluída para {time_casa} vs {time_fora}**")
-        
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Provável Vencedor", res['vencedor'])
-        c2.metric("Ambas Marcam", res['btts'])
-        c3.metric("Linha de Cantos", f"+ {res['escanteios']}")
-        c4.metric("Média de Cartões", res['cartões'])
-        
-        st.warning(f"💡 **Dica de Aposta:** Entrada sugerida em Over {res['escanteios'] - 1.5} cantos e BTTS {res['btts']}.")
+if dados is not None and 'NOME_TIME' in dados.columns:
+    st.sidebar.header("Próximo Jogo")
+    # Agora ele usa a coluna correta, evitando o erro do print
+    casa = st.sidebar.selectbox("Mandante", dados['NOME_TIME'].unique())
+    fora = st.sidebar.selectbox("Visitante", dados['NOME_TIME'].unique())
 
-    st.markdown("---")
-    st.subheader("📊 Base de Dados (Últimos 5 Jogos)")
-    st.dataframe(dados, use_container_width=True, hide_index=True)
+    if st.sidebar.button("Analisar Confronto"):
+        d_casa = dados[dados['NOME_TIME'] == casa].iloc[0]
+        d_fora = dados[dados['NOME_TIME'] == fora].iloc[0]
+        
+        st.header(f"⚔️ {casa} vs {fora}")
+        
+        # Exemplo de lógica para "Ambas Marcam" e "Escanteios" baseada nos times
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            # Se o time faz muitos gols e sofre muitos, tendência de BTTS Sim
+            st.metric("Tendência Ambas Marcam", "ALTA" if d_casa.get('GOLS', 0) > 1 else "MÉDIA")
+        with col2:
+            st.metric("Projeção de Cantos", f"+{round(d_casa.get('ESCANTARIOS (MÉDIA)', 5) + d_fora.get('ESCANTARIOS (MÉDIA)', 5) - 1, 1)}")
+        with col3:
+            st.metric("Favorito", casa if d_casa.get('VITÓRIAS', 0) > d_fora.get('VITÓRIAS', 0) else fora)
+
+    st.divider()
+    st.subheader("📋 Tabela Atualizada de Times")
+    st.dataframe(dados, use_container_width=True)
 else:
-    st.error("Erro ao carregar dados. Verifique a publicação da planilha.")
+    st.error("Erro: A coluna de 'Time' não foi encontrada. Verifique o cabeçalho da sua planilha.")
