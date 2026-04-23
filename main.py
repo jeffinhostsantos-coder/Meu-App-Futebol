@@ -1,52 +1,55 @@
 import streamlit as st
 import pandas as pd
+import requests
 
-st.set_page_config(page_title="Scraper Pro Fut", layout="wide")
-st.title("🕵️ Web Scraper: Estatísticas Reais 2025-2026")
+st.set_page_config(page_title="Analista Pro 2026", layout="wide")
+st.title("🕵️ Web Scraper: Dados Reais 2025-2026")
 
-# URL do FBRef (Tabela de estatísticas do Brasileirão)
-# O FBRef é excelente porque as URLs são fáceis de ler
+# URL oficial de estatísticas
 URL_STATS = "https://fbref.com/pt/comps/24/stats/Serie-A-Estatisticas"
 
-@st.cache_data(ttl=3600) # Guarda os dados por 1 hora para não ser bloqueado pelo site
-def carregar_dados_scraping():
+@st.cache_data(ttl=3600)
+def carregar_dados_com_disfarce():
+    # Cabeçalho que simula um navegador real
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     try:
-        # O Pandas lê todas as tabelas da página de uma vez
-        tabelas = pd.read_html(URL_STATS)
-        df = tabelas[0] # Geralmente a primeira tabela é a de estatísticas
+        # Primeiro baixamos o conteúdo com requests usando o disfarce
+        response = requests.get(URL_STATS, headers=headers)
+        if response.status_code == 403:
+            return "Bloqueio 403: O site recusou o acesso. Tente novamente em alguns minutos."
         
-        # Limpeza de colunas (FBRef usa níveis múltiplos)
-        df.columns = [' '.join(col).strip() for col in df.columns.values]
+        # O Pandas lê a tabela do texto baixado
+        tabelas = pd.read_html(response.text)
+        df = tabelas[0]
         
-        # Selecionando o que importa para você
-        # Nota: Os nomes das colunas podem variar, então filtramos o que contém palavras-chave
-        colunas_uteis = [c for c in df.columns if 'Squad' in c or 'Gls' in c or 'Ast' in c or 'Cartões Amarelos' in c]
-        return df[colunas_uteis].head(20)
+        # Limpeza de colunas (Série A FBRef tem cabeçalho duplo)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [col[1] for col in df.columns.values]
+        
+        return df
     except Exception as e:
-        return f"Erro ao acessar o site: {e}"
+        return f"Erro: {str(e)}"
 
-st.sidebar.info("Este plano lê dados diretamente do FBRef via Web Scraping.")
-
-if st.button('🔍 Extrair Dados Atualizados'):
-    with st.spinner('O Python está lendo o site de estatísticas...'):
-        df_stats = carregar_dados_scraping()
+if st.button('🔍 Extrair Dados Sem Bloqueio'):
+    with st.spinner('Simulando acesso seguro...'):
+        dados = carregar_dados_com_disfarce()
         
-        if isinstance(df_stats, str):
-            st.error(df_stats)
-            st.warning("O site pode ter bloqueado o acesso temporário. Tente novamente em instantes.")
+        if isinstance(dados, str):
+            st.error(dados)
         else:
-            st.success("Dados extraídos com sucesso!")
+            st.success("Acesso autorizado! Dados carregados.")
             
-            # Ajuste de nomes para exibição
-            df_stats.columns = ['Time', 'Gols', 'Assistências', 'Amarelos']
+            # Ajuste das colunas para o que você precisa
+            # O FBRef usa 'Gls' para Gols e 'Squad' para Time
+            st.subheader("📊 Performance Real da Temporada")
+            colunas_ver = ['Squad', 'MP', 'Gls', 'Ast', 'CrdY']
+            colunas_finais = [c for c in colunas_ver if c in dados.columns]
             
-            # Criando métricas de assertividade
-            st.subheader("📊 Tabela de Desempenho Real")
-            st.dataframe(df_stats, use_container_width=True)
-            
-            st.divider()
-            
-            # Lógica de predição baseada no Scraping
-            st.subheader("💡 Insight do Analista")
-            top_gols = df_stats.sort_values(by='Gols', ascending=False).iloc[0]
-            st.write(f"O time com maior tendência de gols atualmente é o **{top_gols['Time']}**.")
+            if colunas_finais:
+                df_exibir = dados[colunas_finais].copy()
+                df_exibir.columns = ['Time', 'Jogos', 'Gols', 'Assist', 'Amarelos']
+                st.dataframe(df_exibir, use_container_width=True)
+            else:
+                st.dataframe(dados.head(10))
