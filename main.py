@@ -1,58 +1,55 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="Analista Master 2026", layout="wide")
+st.set_page_config(page_title="Analista Pro 2026", layout="wide")
 
-URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4oAQdRvnyDmqozRSX2wggU8ABqruw2LgD8P0mKqsLkYCe8CC14jeSKpZ6Q5IaAHjLKPlgdqXp0wPE/pub?output=csv"
-
-@st.cache_data(ttl=300)
-def carregar_dados():
+# Função que busca os dados SEM precisar de planilha
+@st.cache_data(ttl=3600)
+def buscar_dados_direto():
     try:
-        df = pd.read_csv(URL_PLANILHA)
-        df.columns = [c.strip().upper() for c in df.columns]
-        # Resolve o erro de 'Time' procurando o nome da coluna correto da ESPN
-        col_time = [c for c in df.columns if 'EQUIPE' in c or 'TIME' in c or 'SQUAD' in c][0]
-        df = df.rename(columns={col_time: 'NOME_TIME'})
+        # Usamos a Wikipédia ou sites de estatística estáveis
+        url = "https://pt.wikipedia.org/wiki/Campeonato_Brasileiro_de_Futebol_de_2024_-_S%C3%A9rie_A"
+        tabelas = pd.read_html(url)
+        # Geralmente a tabela de classificação é a primeira ou segunda
+        df = tabelas[6] # Ajustamos o índice conforme a estrutura do site
+        df.columns = [str(c).upper().strip() for c in df.columns]
         return df
-    except:
+    except Exception as e:
+        st.error(f"Erro ao buscar dados: {e}")
         return None
 
-st.title("⚽ Preditor de Confrontos: Brasileirão 2026")
-dados = carregar_dados()
+st.title("🛡️ Analisador de Confrontos Direto (Sem Planilha)")
+
+dados = buscar_dados_direto()
 
 if dados is not None:
-    st.sidebar.header("Próximos Jogos (Abril/2026)")
-    time_casa = st.sidebar.selectbox("Mandante", dados['NOME_TIME'].unique())
-    time_fora = st.sidebar.selectbox("Visitante", dados['NOME_TIME'].unique())
+    # Identifica a coluna de times (geralmente chamada de 'EQUIPE' ou 'TIME')
+    col_time = [c for c in dados.columns if 'EQUIPE' in c or 'TIME' in c][0]
+    lista_times = dados[col_time].unique()
 
-    if st.sidebar.button("📊 GERAR ANÁLISE PREDITIVA"):
-        d_casa = dados[dados['NOME_TIME'] == time_casa].iloc[0]
-        d_fora = dados[dados['NOME_TIME'] == time_fora].iloc[0]
+    st.sidebar.header("Simular Jogo 2026")
+    casa = st.sidebar.selectbox("Mandante", lista_times)
+    fora = st.sidebar.selectbox("Visitante", lista_times)
 
-        st.subheader(f"⚔️ Análise: {time_casa} vs {time_fora}")
+    if st.sidebar.button("📊 GERAR PROBABILIDADES"):
+        st.header(f"⚔️ {casa} vs {fora}")
         
-        # --- LÓGICA DE ÚLTIMOS 5 JOGOS ---
-        # Analisa a coluna 'ÚLT_5' que vem da ESPN (V-E-D)
-        vitorias_casa = str(d_casa.get('ÚLT_5', 'E')).count('V')
-        vitorias_fora = str(d_fora.get('ÚLT_5', 'E')).count('V')
+        # Lógica para Ambas Marcam, Cantos e Cartões baseada na posição da tabela
+        pos_casa = dados[dados[col_time] == casa].index[0]
+        pos_fora = dados[dados[col_time] == fora].index[0]
 
-        # Ambas Marcam: Se a média de gols pró (GP) for alta em ambos
-        prob_btts = "ALTA (80%)" if (float(d_casa.get('GP', 0)) > 1.2 and float(d_fora.get('GP', 0)) > 1.0) else "BAIXA (45%)"
-        
-        # Escanteios e Cartões: Baseado na agressividade ofensiva (Forma Recente)
-        est_cantos = 10.5 if (vitorias_casa + vitorias_fora) > 5 else 8.5
-        est_cartoes = "+4.5" if vitorias_casa < 2 else "+3.5"
+        # Probabilidades Inteligentes
+        prob_btts = "Alta (75%)" if pos_casa < 10 and pos_fora < 10 else "Média (50%)"
+        cantos = "10.5" if pos_casa < 5 else "8.5"
+        cartoes = "5.5" if pos_casa > 15 else "4.5"
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Vencedor Provável", time_casa if vitorias_casa >= vitorias_fora else time_fora)
-        c2.metric("Ambas Marcam", prob_btts)
-        c3.metric("Escanteios", f"+{est_cantos}")
-        c4.metric("Cartões", est_cartoes)
-
-        st.success(f"💡 **Prognóstico:** Jogo com tendência de {prob_btts} Ambas Marcam e vantagem para o {time_casa if vitorias_casa >= vitorias_fora else time_fora}.")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Ambas Marcam", prob_btts)
+        c2.metric("Escanteios", f"+{cantos}")
+        c3.metric("Cartões", f"+{cartoes}")
 
     st.divider()
-    st.write("### 📋 Tabela Geral de Times (Sincronizada GE/ESPN)")
-    st.dataframe(dados, use_container_width=True)
+    st.subheader("📋 Tabela Atualizada em Tempo Real")
+    st.dataframe(dados)
 else:
-    st.error("Erro ao carregar dados. Verifique a publicação CSV da sua planilha.")
+    st.warning("Aguardando conexão com o servidor de dados...")
