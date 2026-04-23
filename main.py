@@ -5,7 +5,7 @@ st.set_page_config(page_title="Analista Pro 2026", layout="wide")
 st.title("🎯 Analisador de Dados (GE & ESPN Edition)")
 
 # COLE O SEU LINK DO GOOGLE SHEETS (CSV) ABAIXO:
-URL_PLANILHA = "SUBSTITUA_PELO_SEU_LINK_AQUI"
+URL_PLANILHA = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4oAQdRvnyDmqozRSX2wggU8ABqruw2LgD8P0mKqsLkYCe8CC14jeSKpZ6Q5IaAHjLKPlgdqXp0wPE/pub?output=csv"
 
 @st.cache_data(ttl=60)
 def carregar_dados():
